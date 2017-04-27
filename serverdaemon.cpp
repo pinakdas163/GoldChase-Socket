@@ -50,18 +50,18 @@ unsigned char activePlayers() {
 void serversighandler(int handler)
 {
   if(handler==SIGHUP) {
-
     unsigned char activeplayer = activePlayers();
     unsigned char socketplayer = G_SOCKPLR|activeplayer;
-    WRITE(2, &socketplayer, sizeof(char));
-    //WRITE(new_sockfd, &socketplayer, sizeof(char));
+    //WRITE(2, &socketplayer, sizeof(char));
+    WRITE(new_sockfd, &socketplayer, sizeof(socketplayer));
     if(socketplayer==G_SOCKPLR)
     {
-      WRITE(2, "All\n", 3);
+      //WRITE(2, "All\n", 3);
       //close(shm_fd);
-      //shm_unlink("/TAG_mymap");
+      shm_unlink("/TAG_mymap");
       //sem_close(sem);
-      //sem_unlink("/mySem");
+      sem_unlink("/mySem");
+      exit(0);
     }
   }
   else if(handler==SIGUSR1)
@@ -79,15 +79,15 @@ void serversighandler(int handler)
     {
       short n = sockmap.size();
       unsigned char byt = 0;
-      //WRITE(new_sockfd, &byt, sizeof(char));
-      WRITE(2, &n, sizeof(n));
-      // for(short i=0; i< n; i++)
-      // {
-      //   short offset= sockmap[i].first;
-      //   unsigned char value = sockmap[i].second;
-      //   WRITE(new_sockfd, &offset, sizeof(offset));
-      //   WRITE(new_sockfd, &value, sizeof(value));
-      // }
+      WRITE(new_sockfd, &byt, sizeof(byt));
+      WRITE(new_sockfd, &n, sizeof(n));
+      for(short i=0; i< n; i++)
+      {
+        short offset= sockmap[i].first;
+        unsigned char value = sockmap[i].second;
+        WRITE(new_sockfd, &offset, sizeof(offset));
+        WRITE(new_sockfd, &value, sizeof(value));
+      }
     }
   }
 }
@@ -95,7 +95,7 @@ void createServer() {
   //  close(2);
   //  int fd=open("/home/pinakdas163/611myfiles/project4/pinakfifo", O_WRONLY);
   // server daemon start up
-  int shm_fd1=shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR);
+  int shm_fd1=shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR|S_IRWXU);
   int rowp, colp;
   read(shm_fd1, &rowp, sizeof(int));
   read(shm_fd1, &colp, sizeof(int));
@@ -104,37 +104,12 @@ void createServer() {
 
   servmap_pointer->daemonID=getpid();
   local_map = new unsigned char(rowp*colp);
-  // for(int i=0;i<rowp*colp;i++)
-  // {
-  //   local_map[i]=servmap_pointer->map[i];
-  // }
+
   memcpy(local_map, servmap_pointer->map, rowp*colp);
-  // for(int i=0;i<rowp*colp;i++)
-  // {
-  //   if(local_map[i]==G_WALL)
-  //   {
-  //     //cerr<<'*';
-  //     WRITE(fd,"*",1);
-  //   }
-  //   else if(local_map[i]==G_GOLD)
-  //   {
-  //     //cerr<<'G';
-  //     WRITE(fd,"G",1);
-  //   }
-  //   else if(local_map[i]==G_FOOL)
-  //   {
-  //     //cerr<<'F';
-  //     WRITE(fd,"F",1);
-  //   }
-  //   else if(local_map[i]==G_PLR0)
-  //   {
-  //     //cerr<<'1';
-  //     WRITE(fd,"1",1);
-  //   }
-  //   else {
-  //     WRITE(fd," ",1);
-  //   }
-  // }
+
+  unsigned char servplayers = activePlayers();
+  unsigned char playersock = G_SOCKPLR|servplayers;
+
   struct sigaction serversig_struct; // signal struct
   sigemptyset(&serversig_struct.sa_mask);
   serversig_struct.sa_flags=0;
@@ -147,57 +122,114 @@ void createServer() {
   // ending of setup
   // server connection establishment
 
-  // //change this # between 2000-65k before using
-  // const char* portno="62013";
-  // struct addrinfo hints;
-  // memset(&hints, 0, sizeof(hints)); //zero out everything in structure
-  // hints.ai_family = AF_UNSPEC; //don't care. Either IPv4 or IPv6
-  // hints.ai_socktype=SOCK_STREAM; // TCP stream sockets
-  // hints.ai_flags=AI_PASSIVE; //file in the IP of the server for me
-  // struct addrinfo *servinfo;
-  // if((status=getaddrinfo(NULL, portno, &hints, &servinfo))==-1)
-  // {
-  //   fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
-  //   exit(1);
-  // }
-  // sockfd=socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
-  //
-  // /*avoid "Address already in use" error*/
-  // int yes=1;
-  // if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int))==-1)
-  // {
-  //   perror("setsockopt");
-  //   exit(1);
-  // }
-  // //We need to "bind" the socket to the port number so that the kernel
-  // //can match an incoming packet on a port to the proper process
-  // if((status=bind(sockfd, servinfo->ai_addr, servinfo->ai_addrlen))==-1)
-  // {
-  //   perror("bind");
-  //   exit(1);
-  // }
-  // //when done, release dynamically allocated memory
-  // freeaddrinfo(servinfo);
-  //
-  // if(listen(sockfd,1)==-1)
-  // {
-  //   perror("listen");
-  //   exit(1);
-  // }
-  // //printf("Blocking, waiting for client to connect\n");
-  // struct sockaddr_in client_addr;
-  // socklen_t clientSize=sizeof(client_addr);
-  //
-  // if((new_sockfd=accept(sockfd, (struct sockaddr*) &client_addr, &clientSize))==-1)
-  // {
-  //   perror("accept");
-  //   exit(1);
-  // }
-  // // read and write to the socket will be here
-  //
-  // close(sockfd);
-  // close(new_sockfd);
-  //delete local_map;
+  //change this # between 2000-65k before using
+  const char* portno="62010";
+  struct addrinfo hints;
+  memset(&hints, 0, sizeof(hints)); //zero out everything in structure
+  hints.ai_family = AF_UNSPEC; //don't care. Either IPv4 or IPv6
+  hints.ai_socktype=SOCK_STREAM; // TCP stream sockets
+  hints.ai_flags=AI_PASSIVE; //file in the IP of the server for me
+  struct addrinfo *servinfo;
+  if((status=getaddrinfo(NULL, portno, &hints, &servinfo))==-1)
+  {
+    fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
+    exit(1);
+  }
+  sockfd=socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
+
+  /*avoid "Address already in use" error*/
+  int yes=1;
+  if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int))==-1)
+  {
+    perror("setsockopt");
+    exit(1);
+  }
+  //We need to "bind" the socket to the port number so that the kernel
+  //can match an incoming packet on a port to the proper process
+  if((status=bind(sockfd, servinfo->ai_addr, servinfo->ai_addrlen))==-1)
+  {
+    perror("bind");
+    exit(1);
+  }
+  //when done, release dynamically allocated memory
+  freeaddrinfo(servinfo);
+
+  if(listen(sockfd,1)==-1)
+  {
+    perror("listen");
+    exit(1);
+  }
+  //printf("Blocking, waiting for client to connect\n");
+  struct sockaddr_in client_addr;
+  socklen_t clientSize=sizeof(client_addr);
+
+  do {
+    new_sockfd=accept(sockfd, (struct sockaddr*) &client_addr, &clientSize);
+  }while(new_sockfd==-1 && errno==EINTR);
+  if(new_sockfd==-1 && errno!=EINTR)
+  {
+    perror("accept");
+    exit(1);
+  }
+  // read and write to the socket will be here
+  WRITE(new_sockfd, &rowp, sizeof(rowp));
+  WRITE(new_sockfd, &colp, sizeof(colp));
+  for(int i=0;i<rowp*colp;i++)
+  {
+    WRITE(new_sockfd, &local_map[i], sizeof(local_map));
+  }
+  WRITE(new_sockfd, &playersock, sizeof(playersock));
+
+  while(true) {
+    unsigned char protocol, newmapbyte;
+    short noOfchangedmap, offset;
+    unsigned char playerbit[5]= {G_PLR0, G_PLR1, G_PLR2, G_PLR3, G_PLR4};
+    READ(new_sockfd, &protocol, sizeof(protocol));
+
+    if(protocol & G_SOCKPLR)
+    {
+      for(int i=0;i<5; i++)
+      {
+        if(protocol & playerbit[i] && servmap_pointer->players[i]==0)
+        {
+          servmap_pointer->players[i]=getpid();
+        }
+        else if((protocol & playerbit[i])==false && servmap_pointer->players[i]!=0)
+        {
+          servmap_pointer->players[i]=0;
+        }
+      }
+      if(protocol==G_SOCKPLR)
+      {
+        shm_unlink("/TAG_mymap");
+        sem_unlink("/mySem");
+        exit(0);
+      }
+    }
+
+    else if(protocol==0) {
+
+      READ(new_sockfd, &noOfchangedmap, sizeof(noOfchangedmap));
+      for(short i=0;i<noOfchangedmap; i++)
+      {
+        READ(new_sockfd, &offset, sizeof(offset));
+        READ(new_sockfd, &newmapbyte, sizeof(newmapbyte));
+        servmap_pointer->map[offset]=newmapbyte;
+        local_map[offset]=newmapbyte;
+      }
+      for(int i=0;i<5; i++)
+      {
+        if(servmap_pointer->players[i]!=0 && servmap_pointer->players[i]!=getpid())
+        {
+          kill(servmap_pointer->players[i], SIGUSR1);
+        }
+      }
+    }
+  }
+
+  close(sockfd);
+  close(new_sockfd);
+  delete local_map;
 }
 
 void create_server_daemon()

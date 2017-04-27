@@ -18,6 +18,7 @@
 #include <cstring>
 #include <netdb.h>
 #include <stdio.h>
+#include "fancyRW.h"
 #include "mapboard.h"
 using namespace std;
 
@@ -28,6 +29,9 @@ mapboard *map_pointer;
 int currLoc=0;
 mqd_t playerwrtque;
 int player;
+int clientdpipe[2];
+int clientfd;
+unsigned char *local_map2;
 int input(int item, unsigned char *mp, int row, int col)
 {
   int randnum=0;
@@ -363,9 +367,225 @@ std::string playerNo()
   return ss.str();
 }
 
+void clientsighubhandler(int sig) {
+  unsigned char activeplayers=G_SOCKPLR;
+  if(map_pointer->players[0]!=0)
+    activeplayers |= G_PLR0;
+  if(map_pointer->players[1]!=0)
+    activeplayers |= G_PLR1;
+  if(map_pointer->players[2]!=0)
+    activeplayers |= G_PLR2;
+  if(map_pointer->players[3]!=0)
+    activeplayers |= G_PLR3;
+  if(map_pointer->players[4]!=0)
+    activeplayers |= G_PLR4;
+  WRITE(clientfd, &activeplayers, sizeof(activeplayers));
+  if(activeplayers==G_SOCKPLR)
+  {
+    shm_unlink("/TAG_mymap");
+    sem_close(sem);
+    sem_unlink("/mySem");
+    exit(0);
+  }
+}
+
+void clientsigusr1handler(int sig)
+{
+  std::vector<std::pair<short, unsigned char> > sockmap;
+  for(short i=0; i<map_pointer->rows*map_pointer->cols;i++)
+  {
+    if(local_map2[i]!=map_pointer->map[i])
+    {
+      sockmap.push_back(std::make_pair(i, map_pointer->map[i]));
+      local_map2[i]=map_pointer->map[i];
+    }
+  }
+  if(sockmap.size()>0)
+  {
+    short n = sockmap.size();
+    unsigned char byt = 0;
+    WRITE(clientfd, &byt, sizeof(byt));
+    WRITE(clientfd, &n, sizeof(n));
+    for(short i=0; i< n; i++)
+    {
+      short offset= sockmap[i].first;
+      unsigned char value = sockmap[i].second;
+      WRITE(clientfd, &offset, sizeof(offset));
+      WRITE(clientfd, &value, sizeof(value));
+    }
+  }
+
+}
+
+void create_client_daemon(string ipaddr) {
+  int status;
+  int clientrows, clientcols;
+
+  unsigned char *clientsidemap;
+  unsigned char clientPlayerSoc;
+
+  pipe(clientdpipe);
+  pid_t id=fork();
+  if(id>0) {
+    int val;
+    close(clientdpipe[1]);
+    READ(clientdpipe[0], &val, sizeof(int));
+
+    if(val==1) {
+      WRITE(2, "success\n", sizeof("success\n"));
+    }
+    else {
+      WRITE(2, "failure\n", sizeof("failure\n"));
+    }
+    return;
+  }
+
+  if(fork>0) {
+    exit(0);
+  }
+
+  if(setsid()==-1) //child obtains its own SID & Process Group
+    exit(1);
+  for(int i=0; i<sysconf(_SC_OPEN_MAX); ++i)
+    if(i!=clientdpipe[1])
+      close(i);
+  open("/dev/null", O_RDWR); //fd 0
+  open("/dev/null", O_RDWR); //fd 1
+  //open("/dev/null", O_RDWR); //fd 2
+  int clfd=open("/home/pinakdas163/611myfiles/project4/binitfifo", O_WRONLY);
+  if(clfd==-1)
+  {
+    exit(99);
+  }
+  umask(0);
+  chdir("/");
+  //now do whatever you want the daemon to do
+  const char* portno="62010";
+  struct addrinfo hints;
+  memset(&hints, 0, sizeof(hints)); //zero out everything in structure
+  hints.ai_family = AF_UNSPEC; //don't care. Either IPv4 or IPv6
+  hints.ai_socktype=SOCK_STREAM; // TCP stream sockets
+
+  struct addrinfo *servinfo;
+  //instead of "localhost", it could by any domain name
+  if((status=getaddrinfo(ipaddr.c_str(), portno, &hints, &servinfo))==-1)
+  {
+    fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
+    exit(1);
+  }
+  clientfd=socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
+
+  if((status=connect(clientfd, servinfo->ai_addr, servinfo->ai_addrlen))==-1)
+  {
+    perror("connect");
+    exit(1);
+  }
+  //release the information allocated by getaddrinfo()
+  //newclientfd=clientfd;
+  freeaddrinfo(servinfo);
+  READ(clientfd, &clientrows, sizeof(int));
+  READ(clientfd, &clientcols, sizeof(int));
+  unsigned char square;
+  local_map2=new unsigned char[clientrows*clientcols];
+  clientsidemap=new unsigned char[clientrows*clientcols];
+  for(int i=0;i<clientrows*clientcols;i++)
+  {
+    READ(clientfd,&square, sizeof(char));
+    clientsidemap[i]=square;
+  }
+  memcpy(local_map2, clientsidemap, clientrows*clientcols);
+
+  sem=sem_open("/mySem", O_CREAT,
+                       S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,1);
+  if(sem==SEM_FAILED)
+  {
+    WRITE(2, "semaphore creation in client failed", sizeof("semaphore creation in client failed"));
+  }
+  int shm_fd2=shm_open("/TAG_mymap",O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
+  ftruncate(shm_fd2, (clientrows*clientcols)+sizeof(mapboard));
+  map_pointer=(mapboard*)mmap(NULL, (clientrows*clientcols)+sizeof(mapboard), PROT_READ|PROT_WRITE,
+    MAP_SHARED, shm_fd2, 0);
+  map_pointer->daemonID=getpid();
+  map_pointer->rows=clientrows;
+  map_pointer->cols=clientcols;
+  memcpy(map_pointer->map, local_map2, clientrows*clientcols);
+
+  struct sigaction clientsig_struct;
+  sigemptyset(&clientsig_struct.sa_mask);
+  clientsig_struct.sa_flags=0;
+  clientsig_struct.sa_restorer=NULL;
+  clientsig_struct.sa_handler=clientsighubhandler;
+  sigaction(SIGHUP, &clientsig_struct, NULL);
+
+  clientsig_struct.sa_handler=clientsigusr1handler;
+  sigaction(SIGUSR1, &clientsig_struct, NULL);
+
+  READ(clientfd, &clientPlayerSoc, sizeof(clientPlayerSoc));
+
+  unsigned char playerbit[5]={G_PLR0, G_PLR1, G_PLR2, G_PLR3, G_PLR4};
+  for(int i=0; i<5; i++)
+  {
+    if((clientPlayerSoc & playerbit[i]) && map_pointer->players[i]==0)
+    {
+      map_pointer->players[i]=getpid();
+    }
+  }
+
+  int val=1;
+  WRITE(clientdpipe[1], &val, sizeof(val));
+  while(true) {
+    unsigned char protocol, newmapbyte;
+    short noOfchangedmap, offset;
+    READ(clientfd, &protocol, sizeof(protocol));
+
+    if(protocol & G_SOCKPLR)
+    {
+      for(int i=0;i<5; i++)
+      {
+        if(protocol & playerbit[i] && map_pointer->players[i]==0)
+        {
+          map_pointer->players[i]=getpid();
+        }
+        else if((protocol & playerbit[i])==false && map_pointer->players[i]!=0)
+        {
+          map_pointer->players[i]=0;
+        }
+      }
+      if(protocol==G_SOCKPLR)
+      {
+        shm_unlink("/TAG_mymap");
+        sem_close(sem);
+        sem_unlink("/mySem");
+        exit(0);
+      }
+    }
+
+    else if(protocol==0) {
+
+      READ(clientfd, &noOfchangedmap, sizeof(noOfchangedmap));
+      for(short i=0;i<noOfchangedmap; i++)
+      {
+        READ(clientfd, &offset, sizeof(offset));
+        READ(clientfd, &newmapbyte, sizeof(newmapbyte));
+        map_pointer->map[offset]=newmapbyte;
+        local_map2[offset]=newmapbyte;
+      }
+      for(int i=0;i<5; i++)
+      {
+        if(map_pointer->players[i]!=0 && map_pointer->players[i]!=getpid())
+        {
+          kill(map_pointer->players[i], SIGUSR1);
+        }
+      }
+    }
+  }
+  close(clientfd);
+  delete local_map2;
+}
+
 int main(int argc, char *argv[])
 {
-  bool firstProcess=false;
+  //bool firstProcess=false;
   // close(2);
   // int fd=open("mypipe", O_WRONLY);
   struct sigaction sig_struct;
@@ -396,12 +616,16 @@ int main(int argc, char *argv[])
   sem = sem_open("/mySem", O_RDWR,
                        S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,
                        1);
+   if(argc>1) {
+     string ipaddr;
+     ipaddr=argv[1];
+     if(sem==SEM_FAILED) {
+       create_client_daemon(ipaddr);
+     }
+   }
 // first player
   if(sem==SEM_FAILED)
   {
-    if(argv[1]==NULL) {
-      firstProcess=true;
-    }
     sem = sem_open("/mySem", O_CREAT,
                          S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,1);
     mapstring=createMap(file, row, col, gold);
