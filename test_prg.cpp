@@ -428,16 +428,16 @@ void create_client_daemon(string ipaddr) {
   pipe(clientdpipe);
   pid_t id=fork();
   if(id>0) {
-    int val;
-    close(clientdpipe[1]);
-    READ(clientdpipe[0], &val, sizeof(int));
-
-    if(val==1) {
-      WRITE(2, "success\n", sizeof("success\n"));
-    }
-    else {
-      WRITE(2, "failure\n", sizeof("failure\n"));
-    }
+    // int val;
+    // close(clientdpipe[1]);
+    // READ(clientdpipe[0], &val, sizeof(int));
+    //
+    // if(val==1) {
+    //   WRITE(2, "success\n", sizeof("success\n"));
+    // }
+    // else {
+    //   WRITE(2, "failure\n", sizeof("failure\n"));
+    // }
     return;
   }
 
@@ -500,8 +500,10 @@ void create_client_daemon(string ipaddr) {
                        S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,1);
   if(sem==SEM_FAILED)
   {
-    WRITE(2, "semaphore creation in client failed", sizeof("semaphore creation in client failed"));
+    WRITE(2, "semaphore creation in client failed\n", sizeof("semaphore creation in client failed "));
   }
+  sem_wait(sem);
+  WRITE(2, "client demon creating shared memory\n", sizeof("client demon creating shared memory "));
   int shm_fd2=shm_open("/TAG_mymap",O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
   ftruncate(shm_fd2, (clientrows*clientcols)+sizeof(mapboard));
   map_pointer=(mapboard*)mmap(NULL, (clientrows*clientcols)+sizeof(mapboard), PROT_READ|PROT_WRITE,
@@ -531,9 +533,11 @@ void create_client_daemon(string ipaddr) {
       map_pointer->players[i]=getpid();
     }
   }
+  WRITE(2, "client demon completed setup memory\n", sizeof("client demon completed setup memory "));
+  sem_post(sem);
 
-  int val=1;
-  WRITE(clientdpipe[1], &val, sizeof(val));
+  // int val=1;
+  // WRITE(clientdpipe[1], &val, sizeof(val));
   while(true) {
     unsigned char protocol, newmapbyte;
     short noOfchangedmap, offset;
@@ -614,16 +618,23 @@ int main(int argc, char *argv[])
   bool endOfmap=false;
   const string file="mymap2.txt";
   vector<string> mapstring;
+
+  if(argc>1) {
+    string ipaddr;
+    ipaddr=argv[1];
+    int newfile_desc=shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR);
+    if(newfile_desc==-1) {
+      create_client_daemon(ipaddr);
+    }
+    do {
+      newfile_desc=shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR);
+    } while(newfile_desc==-1);
+    WRITE(2, "shared memory found\n", sizeof("shared memory found "));
+  }
+
   sem = sem_open("/mySem", O_RDWR,
                        S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,
                        1);
-   if(argc>1) {
-     string ipaddr;
-     ipaddr=argv[1];
-     if(sem==SEM_FAILED) {
-       create_client_daemon(ipaddr);
-     }
-   }
 // first player
   if(sem==SEM_FAILED)
   {
@@ -650,6 +661,7 @@ int main(int argc, char *argv[])
   // subsequent players
   else {
     sem_wait(sem);
+    WRITE(2, "client player got the shared memory\n", sizeof("client player got the shared memory "));
     int file_desc=shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR);
     int rowp, colp;
     read(file_desc, &rowp, sizeof(int));
