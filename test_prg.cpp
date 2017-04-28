@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include "fancyRW.h"
 #include "mapboard.h"
+#include <sys/wait.h>
 using namespace std;
 
 Map *goldchasecopy;
@@ -297,20 +298,20 @@ void exitfunc() {
   }
   sem_post(sem);
 
-  bool playercheck=true;
-
-  for(int i=0; i<5; i++) {
-    if(map_pointer->players[i]!=0)
-    {
-      playercheck=false;
-    }
-  }
-  if(playercheck==true)
-  {
-    shm_unlink("/TAG_mymap");
-    sem_close(sem);
-    sem_unlink("/mySem");
-  }
+  // bool playercheck=true;
+  //
+  // for(int i=0; i<5; i++) {
+  //   if(map_pointer->players[i]!=0)
+  //   {
+  //     playercheck=false;
+  //   }
+  // }
+  // if(playercheck==true)
+  // {
+  //   shm_unlink("/TAG_mymap");
+  //   sem_close(sem);
+  //   sem_unlink("/mySem");
+  // }
   std::string qname=mqname(getpid());
   const char* cnam=qname.c_str();
   mq_close(playermsgque);
@@ -701,7 +702,9 @@ int main(int argc, char *argv[])
 
   if(map_pointer->daemonID==0)
   {
+    //WRITE(2,"daemonID equals zero\n",sizeof("daemonid equals zero "));
     create_server_daemon();
+    wait(NULL);
   }
   else {
     kill(map_pointer->daemonID, SIGHUP);
@@ -852,20 +855,20 @@ int main(int argc, char *argv[])
     //kill(map_pointer->daemonID, SIGUSR1);
   }
   sem_post(sem);
-  bool playercheck=true;
-  for(int i=0; i<5; i++) {
-    if(map_pointer->players[i]!=0)
-    {
-      playercheck=false;
-    }
-  }
+  // bool playercheck=true;
+  // for(int i=0; i<5; i++) {
+  //   if(map_pointer->players[i]!=0)
+  //   {
+  //     playercheck=false;
+  //   }
+  // }
   // daemon is now responsible for removing shared memory and semaphore, check daemon id
-  if(playercheck==true)
-  {
-    shm_unlink("/TAG_mymap");
-    sem_close(sem);
-    sem_unlink("/mySem");
-  }
+  // if(playercheck==true)
+  // {
+  //   shm_unlink("/TAG_mymap");
+  //   sem_close(sem);
+  //   sem_unlink("/mySem");
+  // }
   //std::string qname=mqname(getpid());
   //const char* cnam=qname.c_str();
   mq_close(playermsgque);

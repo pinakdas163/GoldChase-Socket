@@ -22,7 +22,7 @@
 #include "fancyRW.h"
 #include "mapboard.h"
 using namespace std;
-
+extern sem_t *sem;
 int sockfd; //file descriptor for the socket
 int status; //for error checking
 int new_sockfd; // file descriptor for each connection
@@ -59,7 +59,7 @@ void serversighandler(int handler)
       //WRITE(2, "All\n", 3);
       //close(shm_fd);
       shm_unlink("/TAG_mymap");
-      //sem_close(sem);
+      sem_close(sem);
       sem_unlink("/mySem");
       exit(0);
     }
@@ -96,14 +96,29 @@ void createServer() {
   //  int fd=open("/home/pinakdas163/611myfiles/project4/pinakfifo", O_WRONLY);
   // server daemon start up
   int shm_fd1=shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR|S_IRWXU);
+  if(shm_fd1==-1)
+  {
+    WRITE(2, "shm_fd1 failed", sizeof("shm_fd1 failed"));
+  }
   int rowp, colp;
-  read(shm_fd1, &rowp, sizeof(int));
-  read(shm_fd1, &colp, sizeof(int));
+  if(read(shm_fd1, &rowp, sizeof(int))!=sizeof(int))
+  {
+    WRITE(2, "read-A failed\n",sizeof("read-a failed."));
+  }
+  if(read(shm_fd1, &colp, sizeof(int))!=sizeof(int))
+  {
+    WRITE(2, "read-B failed\n",sizeof("read-a failed."));
+  }
+  //WRITE(2, "just read rows/cols\n", sizeof("just read rows/cols\n"));
   servmap_pointer=(mapboard*)mmap(NULL, (rowp*colp)+sizeof(mapboard), PROT_READ|PROT_WRITE,
   MAP_SHARED, shm_fd1, 0);
 
+  if(servmap_pointer==MAP_FAILED)
+  {
+    WRITE(2, "map failed", sizeof("map failed"));
+  }
   servmap_pointer->daemonID=getpid();
-  local_map = new unsigned char(rowp*colp);
+  local_map = new unsigned char[rowp*colp];
 
   memcpy(local_map, servmap_pointer->map, rowp*colp);
 
@@ -202,6 +217,7 @@ void createServer() {
       if(protocol==G_SOCKPLR)
       {
         shm_unlink("/TAG_mymap");
+        sem_close(sem);
         sem_unlink("/mySem");
         exit(0);
       }
@@ -247,12 +263,12 @@ void create_server_daemon()
     close(i);
   open("/dev/null", O_RDWR); //fd 0
   open("/dev/null", O_RDWR); //fd 1
-  //open("/dev/null", O_RDWR); //fd 2
-  int fd=open("/home/pinakdas163/611myfiles/project4/pinakfifo", O_WRONLY);
-  if(fd==-1)
-  {
-    exit(99);
-  }
+  open("/dev/null", O_RDWR); //fd 2
+  // int fd=open("/home/pinakdas163/611myfiles/project4/pinakfifo", O_WRONLY);
+  // if(fd==-1)
+  // {
+  //   exit(99);
+  // }
   umask(0);
   chdir("/");
   //now do whatever you want the daemon to do
