@@ -419,47 +419,37 @@ void clientsigusr1handler(int sig)
 }
 
 void create_client_daemon(string ipaddr) {
+  WRITE(2, "daemon created1\n", sizeof("daemon created1 "));
   int status;
   int clientrows, clientcols;
 
   unsigned char *clientsidemap;
   unsigned char clientPlayerSoc;
 
-  pipe(clientdpipe);
-  pid_t id=fork();
-  if(id>0) {
-    // int val;
-    // close(clientdpipe[1]);
-    // READ(clientdpipe[0], &val, sizeof(int));
-    //
-    // if(val==1) {
-    //   WRITE(2, "success\n", sizeof("success\n"));
-    // }
-    // else {
-    //   WRITE(2, "failure\n", sizeof("failure\n"));
-    // }
+  if(fork()>0) {
     return;
   }
 
   if(fork>0) {
     exit(0);
   }
-
+  WRITE(2, "daemon created2\n", sizeof("daemon created2 "));
   if(setsid()==-1) //child obtains its own SID & Process Group
     exit(1);
-  for(int i=0; i<sysconf(_SC_OPEN_MAX); ++i)
-    if(i!=clientdpipe[1])
+  for(int i=0; i<sysconf(_SC_OPEN_MAX); ++i) {
       close(i);
+  }
   open("/dev/null", O_RDWR); //fd 0
   open("/dev/null", O_RDWR); //fd 1
-  //open("/dev/null", O_RDWR); //fd 2
-  int clfd=open("/home/pinakdas163/611myfiles/project4/binitfifo", O_WRONLY);
-  if(clfd==-1)
+  open("/dev/null", O_RDWR); //fd 2
+  //int clfd=open("/home/binit/GoldChase-Socket/binitfifo", O_WRONLY);
+  /*if(clfd==-1)
   {
     exit(99);
-  }
+  }*/
   umask(0);
   chdir("/");
+  
   //now do whatever you want the daemon to do
   const char* portno="62010";
   struct addrinfo hints;
@@ -624,11 +614,15 @@ int main(int argc, char *argv[])
     ipaddr=argv[1];
     int newfile_desc=shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR);
     if(newfile_desc==-1) {
+      WRITE(2, "Failed to open shared mem\n", sizeof("Failed to open shared mem "));
       create_client_daemon(ipaddr);
     }
     do {
       newfile_desc=shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR);
+      WRITE(2, "waiting for shm\n", sizeof("waiting for shm "));
+      sleep(5);
     } while(newfile_desc==-1);
+
     WRITE(2, "shared memory found\n", sizeof("shared memory found "));
   }
 
