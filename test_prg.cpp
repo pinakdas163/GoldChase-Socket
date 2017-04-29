@@ -425,32 +425,41 @@ void create_client_daemon(string ipaddr) {
 
   unsigned char *clientsidemap;
   unsigned char clientPlayerSoc;
-
+  pipe(clientdpipe);
   if(fork()>0) {
+    close(clientdpipe[1]);
+    int msg=0;
+    READ(clientdpipe[0], &msg, sizeof(msg));
+    if(msg==0)
+      WRITE(2, "SHM creation failed\n", sizeof("SHM creation failed "));
+    else
+      WRITE(2, "SHM creation success\n", sizeof("SHM creation success "));
     return;
   }
 
   if(fork>0) {
     exit(0);
   }
-  WRITE(2, "daemon created2\n", sizeof("daemon created2 "));
+  WRITE(2, "daemon creation started\n", sizeof("daemon creation started "));
   if(setsid()==-1) //child obtains its own SID & Process Group
     exit(1);
   for(int i=0; i<sysconf(_SC_OPEN_MAX); ++i) {
-      close(i);
+      if(i!=clientdpipe[1])
+        close(i);
   }
   open("/dev/null", O_RDWR); //fd 0
   open("/dev/null", O_RDWR); //fd 1
-  open("/dev/null", O_RDWR); //fd 2
-  //int clfd=open("/home/binit/GoldChase-Socket/binitfifo", O_WRONLY);
-  /*if(clfd==-1)
+  //open("/dev/null", O_RDWR); //fd 2
+  int clfd=open("/home/binit/GoldChase-Socket/binitfifo", O_WRONLY);
+  if(clfd==-1)
   {
     exit(99);
-  }*/
+  }
   umask(0);
   chdir("/");
-  
+
   //now do whatever you want the daemon to do
+  WRITE(2, "daemon creation finished\n", sizeof("daemon creation finished "));
   const char* portno="62010";
   struct addrinfo hints;
   memset(&hints, 0, sizeof(hints)); //zero out everything in structure
@@ -526,8 +535,8 @@ void create_client_daemon(string ipaddr) {
   WRITE(2, "client demon completed setup memory\n", sizeof("client demon completed setup memory "));
   sem_post(sem);
 
-  // int val=1;
-  // WRITE(clientdpipe[1], &val, sizeof(val));
+  int msg=1;
+  WRITE(clientdpipe[1], &msg, sizeof(msg));
   while(true) {
     unsigned char protocol, newmapbyte;
     short noOfchangedmap, offset;
@@ -609,26 +618,18 @@ int main(int argc, char *argv[])
   const string file="mymap2.txt";
   vector<string> mapstring;
 
-  if(argc>1) {
-    string ipaddr;
-    ipaddr=argv[1];
-    int newfile_desc=shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR);
-    if(newfile_desc==-1) {
-      WRITE(2, "Failed to open shared mem\n", sizeof("Failed to open shared mem "));
-      create_client_daemon(ipaddr);
-    }
-    do {
-      newfile_desc=shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR);
-      WRITE(2, "waiting for shm\n", sizeof("waiting for shm "));
-      sleep(5);
-    } while(newfile_desc==-1);
-
-    WRITE(2, "shared memory found\n", sizeof("shared memory found "));
-  }
-
   sem = sem_open("/mySem", O_RDWR,
                        S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,
                        1);
+   if(argv[1]!=NULL) {
+     string ipaddr;
+     ipaddr=argv[1];
+     if(sem==SEM_FAILED)
+     {
+       create_client_daemon(ipaddr);
+     }
+     WRITE(2, "shared memory found\n", sizeof("shared memory found "));
+   }
 // first player
   if(sem==SEM_FAILED)
   {
