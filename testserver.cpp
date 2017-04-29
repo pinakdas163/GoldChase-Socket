@@ -21,11 +21,11 @@ using namespace std;
 void clientdaemon(string ipaddr) {
 
   //now do whatever you want the daemon to do
-  int sockfd; //file descriptor for the socket
+  int clientfd; //file descriptor for the socket
   int status; //for error checking
 
   //change this # between 2000-65k before using
-  const char* portno="42425"; 
+  const char* portno="42425";
 
   struct addrinfo hints;
   memset(&hints, 0, sizeof(hints)); //zero out everything in structure
@@ -39,9 +39,9 @@ void clientdaemon(string ipaddr) {
     fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
     exit(1);
   }
-  sockfd=socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
+  clientfd=socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
 
-  if((status=connect(sockfd, servinfo->ai_addr, servinfo->ai_addrlen))==-1)
+  if((status=connect(clientfd, servinfo->ai_addr, servinfo->ai_addrlen))==-1)
   {
     perror("connect");
     exit(1);
@@ -51,7 +51,7 @@ void clientdaemon(string ipaddr) {
 
   const char* message="One small step for (a) man, one large  leap for Mankind";
   int n;
-  if((n=WRITE(sockfd, &message, strlen(message)))==-1)
+  if((n=WRITE(clientfd, &message, strlen(message)))==-1)
   {
     perror("write");
     exit(1);
@@ -59,9 +59,9 @@ void clientdaemon(string ipaddr) {
   printf("client wrote %d characters\n", n);
   char buffer[100];
   memset(buffer, 0, 100);
-  READ(sockfd, &buffer, 99);
+  READ(clientfd, &buffer, 99);
   printf("%s\n", buffer);
-  close(sockfd);
+  close(clientfd);
 }
 
 void serverdaemon() {
@@ -71,7 +71,7 @@ void serverdaemon() {
 
 
   //change this # between 2000-65k before using
-  const char* portno="42425"; 
+  const char* portno="42425";
   struct addrinfo hints;
   memset(&hints, 0, sizeof(hints)); //zero out everything in structure
   hints.ai_family = AF_UNSPEC; //don't care. Either IPv4 or IPv6
@@ -149,10 +149,10 @@ int main(int argc, char* argv[]) {
 		string ipaddr=argv[1];
 		clientdaemon(ipaddr);
 	}
-	
+
 	else {
 		// call server daemon
 		serverdaemon();
 	}
 	return 0;
-}	
+}
