@@ -426,15 +426,15 @@ void create_client_daemon(string ipaddr) {
 
   unsigned char *clientsidemap;
   unsigned char clientPlayerSoc;
-  pipe(clientdpipe);
+  //pipe(clientdpipe);
   if(fork()>0) {
-    close(clientdpipe[1]);
-    int msg;
-    READ(clientdpipe[0], &msg, sizeof(msg));
-    if(msg==0)
-      WRITE(2, "SHM creation failed\n", sizeof("SHM creation failed "));
-    else
-      WRITE(2, "SHM creation success\n", sizeof("SHM creation success "));
+    // close(clientdpipe[1]);
+    // int msg;
+    // READ(clientdpipe[0], &msg, sizeof(msg));
+    // if(msg==0)
+    //   WRITE(2, "SHM creation failed\n", sizeof("SHM creation failed "));
+    // else
+    //   WRITE(2, "SHM creation success\n", sizeof("SHM creation success "));
     return;
   }
 
@@ -445,8 +445,8 @@ void create_client_daemon(string ipaddr) {
   if(setsid()==-1) //child obtains its own SID & Process Group
     exit(1);
   for(int i=0; i<sysconf(_SC_OPEN_MAX); ++i) {
-      if(i!=clientdpipe[1])
-        close(i);
+      //if(i!=clientdpipe[1])
+      close(i);
   }
   open("/dev/null", O_RDWR); //fd 0
   open("/dev/null", O_RDWR); //fd 1
@@ -536,8 +536,8 @@ void create_client_daemon(string ipaddr) {
   WRITE(2, "client demon completed setup memory\n", sizeof("client demon completed setup memory "));
   sem_post(sem);
 
-  int msg=1;
-  WRITE(clientdpipe[1], &msg, sizeof(msg));
+  // int msg=1;
+  // WRITE(clientdpipe[1], &msg, sizeof(msg));
   while(true) {
     unsigned char protocol, newmapbyte;
     short noOfchangedmap, offset;
@@ -628,8 +628,15 @@ int main(int argc, char *argv[])
      if(sem==SEM_FAILED)
      {
        create_client_daemon(ipaddr);
+       while(sem==SEM_FAILED) {
+         sem = sem_open("/mySem", O_RDWR,
+                              S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,
+                              1);
+         sleep(4);
+       }
+       WRITE(2, "shared memory found\n", sizeof("shared memory found "));
      }
-     WRITE(2, "shared memory found\n", sizeof("shared memory found "));
+    //  WRITE(2, "shared memory found\n", sizeof("shared memory found "));
    }
 // first player
   if(sem==SEM_FAILED)
