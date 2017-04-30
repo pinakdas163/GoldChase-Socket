@@ -426,15 +426,7 @@ void create_client_daemon(string ipaddr) {
 
   unsigned char *clientsidemap;
   unsigned char clientPlayerSoc;
-  //pipe(clientdpipe);
   if(fork()>0) {
-    // close(clientdpipe[1]);
-    // int msg;
-    // READ(clientdpipe[0], &msg, sizeof(msg));
-    // if(msg==0)
-    //   WRITE(2, "SHM creation failed\n", sizeof("SHM creation failed "));
-    // else
-    //   WRITE(2, "SHM creation success\n", sizeof("SHM creation success "));
     return;
   }
 
@@ -450,12 +442,12 @@ void create_client_daemon(string ipaddr) {
   }
   open("/dev/null", O_RDWR); //fd 0
   open("/dev/null", O_RDWR); //fd 1
-  open("/dev/null", O_RDWR); //fd 2
-  // int clfd=open("/home/binit/GoldChase-Socket/binitfifo", O_WRONLY);
-  // if(clfd==-1)
-  // {
-  //   exit(99);
-  // }
+  //open("/dev/null", O_RDWR); //fd 2
+  int clfd=open("/home/binit/GoldChase-Socket/binitfifo", O_WRONLY);
+  if(clfd==-1)
+  {
+    exit(99);
+  }
   umask(0);
   chdir("/");
 
@@ -499,29 +491,29 @@ void create_client_daemon(string ipaddr) {
   sem=sem_open("/mySem", O_CREAT,
                        S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,1);
   sem_wait(sem);
-  for(int i=0;i<clientrows*clientcols;i++)
-  {
-    if(local_map2[i]==G_WALL)
-    {
-      WRITE(2,"*",sizeof("*"));
-    }
-    if(local_map2[i]==G_FOOL)
-    {
-      WRITE(2,"F",sizeof("F"));
-    }
-    if(local_map2[i]==G_GOLD)
-    {
-      WRITE(2,"G",sizeof("G"));
-    }
-    if(local_map2[i]==G_PLR0)
-    {
-      WRITE(2,"1",sizeof("1"));
-    }
-    else
-    {
-      WRITE(2," ",sizeof(" "));
-    }
-  }
+  // for(int i=0;i<clientrows*clientcols;i++)
+  // {
+  //   if(local_map2[i]==G_WALL)
+  //   {
+  //     WRITE(2,"*",sizeof("*"));
+  //   }
+  //   if(local_map2[i]==G_FOOL)
+  //   {
+  //     WRITE(2,"F",sizeof("F"));
+  //   }
+  //   if(local_map2[i]==G_GOLD)
+  //   {
+  //     WRITE(2,"G",sizeof("G"));
+  //   }
+  //   if(local_map2[i]==G_PLR0)
+  //   {
+  //     WRITE(2,"1",sizeof("1"));
+  //   }
+  //   else
+  //   {
+  //     WRITE(2," ",sizeof(" "));
+  //   }
+  // }
   WRITE(2, "client demon creating shared memory\n", sizeof("client demon creating shared memory "));
   int shm_fd2=shm_open("/TAG_mymap",O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
   ftruncate(shm_fd2, (clientrows*clientcols)+sizeof(mapboard));
