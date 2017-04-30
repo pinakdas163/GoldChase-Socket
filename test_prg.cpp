@@ -438,7 +438,7 @@ void create_client_daemon(string ipaddr) {
     return;
   }
 
-  if(fork>0) {
+  if(fork()>0) {
     exit(0);
   }
   WRITE(2, "daemon creation started\n", sizeof("daemon creation started "));
