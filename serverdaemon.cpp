@@ -121,7 +121,29 @@ void createServer() {
   local_map = new unsigned char[rowp*colp];
 
   memcpy(local_map, servmap_pointer->map, rowp*colp);
-
+  for(int i=0;i<rowp*colp;i++)
+  {
+    if(local_map[i]==G_WALL)
+    {
+      write(2,"*",sizeof("*"));
+    }
+    else if(local_map[i]==G_FOOL)
+    {
+      write(2,"F",sizeof("F"));
+    }
+    else if(local_map[i]==G_GOLD)
+    {
+      write(2,"G",sizeof("G"));
+    }
+    else if(local_map[i]==G_PLR0)
+    {
+      write(2,"1",sizeof("1"));
+    }
+    else
+    {
+      write(2," ",sizeof(" "));
+    }
+  }
   unsigned char servplayers = activePlayers();
   unsigned char playersock = G_SOCKPLR|servplayers;
 
@@ -187,61 +209,62 @@ void createServer() {
     exit(1);
   }
   // read and write to the socket will be here
+
   WRITE(new_sockfd, &rowp, sizeof(rowp));
   WRITE(new_sockfd, &colp, sizeof(colp));
   for(int i=0;i<rowp*colp;i++)
   {
-    WRITE(new_sockfd, &local_map[i], sizeof(local_map));
+    WRITE(new_sockfd, &local_map[i], sizeof(local_map[i]));
   }
-  WRITE(new_sockfd, &playersock, sizeof(playersock));
-
-  while(true) {
-    unsigned char protocol, newmapbyte;
-    short noOfchangedmap, offset;
-    unsigned char playerbit[5]= {G_PLR0, G_PLR1, G_PLR2, G_PLR3, G_PLR4};
-    READ(new_sockfd, &protocol, sizeof(protocol));
-
-    if(protocol & G_SOCKPLR)
-    {
-      for(int i=0;i<5; i++)
-      {
-        if(protocol & playerbit[i] && servmap_pointer->players[i]==0)
-        {
-          servmap_pointer->players[i]=getpid();
-        }
-        else if((protocol & playerbit[i])==false && servmap_pointer->players[i]!=0)
-        {
-          servmap_pointer->players[i]=0;
-        }
-      }
-      if(protocol==G_SOCKPLR)
-      {
-        shm_unlink("/TAG_mymap");
-        sem_close(sem);
-        sem_unlink("/mySem");
-        exit(0);
-      }
-    }
-
-    else if(protocol==0) {
-
-      READ(new_sockfd, &noOfchangedmap, sizeof(noOfchangedmap));
-      for(short i=0;i<noOfchangedmap; i++)
-      {
-        READ(new_sockfd, &offset, sizeof(offset));
-        READ(new_sockfd, &newmapbyte, sizeof(newmapbyte));
-        servmap_pointer->map[offset]=newmapbyte;
-        local_map[offset]=newmapbyte;
-      }
-      for(int i=0;i<5; i++)
-      {
-        if(servmap_pointer->players[i]!=0 && servmap_pointer->players[i]!=getpid())
-        {
-          kill(servmap_pointer->players[i], SIGUSR1);
-        }
-      }
-    }
-  }
+  // WRITE(new_sockfd, &playersock, sizeof(playersock));
+  //
+  // while(true) {
+  //   unsigned char protocol, newmapbyte;
+  //   short noOfchangedmap, offset;
+  //   unsigned char playerbit[5]= {G_PLR0, G_PLR1, G_PLR2, G_PLR3, G_PLR4};
+  //   READ(new_sockfd, &protocol, sizeof(protocol));
+  //
+  //   if(protocol & G_SOCKPLR)
+  //   {
+  //     for(int i=0;i<5; i++)
+  //     {
+  //       if(protocol & playerbit[i] && servmap_pointer->players[i]==0)
+  //       {
+  //         servmap_pointer->players[i]=getpid();
+  //       }
+  //       else if((protocol & playerbit[i])==false && servmap_pointer->players[i]!=0)
+  //       {
+  //         servmap_pointer->players[i]=0;
+  //       }
+  //     }
+  //     if(protocol==G_SOCKPLR)
+  //     {
+  //       shm_unlink("/TAG_mymap");
+  //       sem_close(sem);
+  //       sem_unlink("/mySem");
+  //       exit(0);
+  //     }
+  //   }
+  //
+  //   else if(protocol==0) {
+  //
+  //     READ(new_sockfd, &noOfchangedmap, sizeof(noOfchangedmap));
+  //     for(short i=0;i<noOfchangedmap; i++)
+  //     {
+  //       READ(new_sockfd, &offset, sizeof(offset));
+  //       READ(new_sockfd, &newmapbyte, sizeof(newmapbyte));
+  //       servmap_pointer->map[offset]=newmapbyte;
+  //       local_map[offset]=newmapbyte;
+  //     }
+  //     for(int i=0;i<5; i++)
+  //     {
+  //       if(servmap_pointer->players[i]!=0 && servmap_pointer->players[i]!=getpid())
+  //       {
+  //         kill(servmap_pointer->players[i], SIGUSR1);
+  //       }
+  //     }
+  //   }
+  // }
 
   close(sockfd);
   close(new_sockfd);
@@ -263,12 +286,12 @@ void create_server_daemon()
     close(i);
   open("/dev/null", O_RDWR); //fd 0
   open("/dev/null", O_RDWR); //fd 1
-  open("/dev/null", O_RDWR); //fd 2
-  // int fd=open("/home/pinakdas163/611myfiles/project4/pinakfifo", O_WRONLY);
-  // if(fd==-1)
-  // {
-  //   exit(99);
-  // }
+  //open("/dev/null", O_RDWR); //fd 2
+  int fd=open("/home/pinakdas163/611myfiles/project4/pinakfifo", O_WRONLY);
+  if(fd==-1)
+  {
+    exit(99);
+  }
   umask(0);
   chdir("/");
   //now do whatever you want the daemon to do

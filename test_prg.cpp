@@ -498,10 +498,7 @@ void create_client_daemon(string ipaddr) {
 
   sem=sem_open("/mySem", O_CREAT,
                        S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,1);
-  if(sem==SEM_FAILED)
-  {
-    WRITE(2, "semaphore creation in client failed\n", sizeof("semaphore creation in client failed "));
-  }
+  sem_wait(sem);
   for(int i=0;i<clientrows*clientcols;i++)
   {
     if(local_map2[i]==G_WALL)
@@ -525,7 +522,6 @@ void create_client_daemon(string ipaddr) {
       WRITE(2," ",sizeof(" "));
     }
   }
-  sem_wait(sem);
   WRITE(2, "client demon creating shared memory\n", sizeof("client demon creating shared memory "));
   int shm_fd2=shm_open("/TAG_mymap",O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
   ftruncate(shm_fd2, (clientrows*clientcols)+sizeof(mapboard));
@@ -652,14 +648,11 @@ int main(int argc, char *argv[])
      {
        create_client_daemon(ipaddr);
        wait(NULL);
-       while(sem_open("/mySem", O_RDWR,
-                            S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,
-                            1)==SEM_FAILED) {
+       while(shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR)==-1) {
          WRITE(2, "looping inside\n",sizeof("looping inside "));
          sleep(4);
        }
        WRITE(2, "shared memory found\n", sizeof("shared memory found "));
-       exit(7);
      }
     //  WRITE(2, "shared memory found\n", sizeof("shared memory found "));
    }
