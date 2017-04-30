@@ -450,12 +450,12 @@ void create_client_daemon(string ipaddr) {
   }
   open("/dev/null", O_RDWR); //fd 0
   open("/dev/null", O_RDWR); //fd 1
-  //open("/dev/null", O_RDWR); //fd 2
-  int clfd=open("/home/binit/GoldChase-Socket/binitfifo", O_WRONLY);
-  if(clfd==-1)
-  {
-    exit(99);
-  }
+  open("/dev/null", O_RDWR); //fd 2
+  // int clfd=open("/home/binit/GoldChase-Socket/binitfifo", O_WRONLY);
+  // if(clfd==-1)
+  // {
+  //   exit(99);
+  // }
   umask(0);
   chdir("/");
 
@@ -628,10 +628,10 @@ int main(int argc, char *argv[])
      if(sem==SEM_FAILED)
      {
        create_client_daemon(ipaddr);
-       while(sem==SEM_FAILED) {
-         sem = sem_open("/mySem", O_RDWR,
-                              S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,
-                              1);
+       while(sem_open("/mySem", O_RDWR,
+                            S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,
+                            1)==SEM_FAILED) {
+         WRITE(2, "looping inside\n",sizeof("looping inside "));
          sleep(4);
        }
        WRITE(2, "shared memory found\n", sizeof("shared memory found "));
