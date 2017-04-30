@@ -429,7 +429,7 @@ void create_client_daemon(string ipaddr) {
   pipe(clientdpipe);
   if(fork()>0) {
     close(clientdpipe[1]);
-    int msg=0;
+    int msg;
     READ(clientdpipe[0], &msg, sizeof(msg));
     if(msg==0)
       WRITE(2, "SHM creation failed\n", sizeof("SHM creation failed "));
