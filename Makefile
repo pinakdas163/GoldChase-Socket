@@ -11,4 +11,4 @@ Map.o: Map.cpp
 	g++ -g -c Map.cpp
 
 clean:
-	rm -f Screen.o Map.o libmap.a test_prg
+	rm -f Screen.o Map.o libmap.a test_prg /dev/shm/sem.mySem /dev/shm/TAG_mymap
