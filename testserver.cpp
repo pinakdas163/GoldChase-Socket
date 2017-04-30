@@ -18,52 +18,6 @@
 #include<sys/socket.h>
 using namespace std;
 
-void clientdaemon(string ipaddr) {
-
-  //now do whatever you want the daemon to do
-  int clientfd; //file descriptor for the socket
-  int status; //for error checking
-
-  //change this # between 2000-65k before using
-  const char* portno="42425";
-
-  struct addrinfo hints;
-  memset(&hints, 0, sizeof(hints)); //zero out everything in structure
-  hints.ai_family = AF_UNSPEC; //don't care. Either IPv4 or IPv6
-  hints.ai_socktype=SOCK_STREAM; // TCP stream sockets
-
-  struct addrinfo *servinfo;
-  //instead of "localhost", it could by any domain name
-  if((status=getaddrinfo(ipaddr.c_str(), portno, &hints, &servinfo))==-1)
-  {
-    fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
-    exit(1);
-  }
-  clientfd=socket(servinfo->ai_family, servinfo->ai_socktype, servinfo->ai_protocol);
-
-  if((status=connect(clientfd, servinfo->ai_addr, servinfo->ai_addrlen))==-1)
-  {
-    perror("connect");
-    exit(1);
-  }
-  //release the information allocated by getaddrinfo()
-  freeaddrinfo(servinfo);
-
-  const char* message="One small step for (a) man, one large  leap for Mankind";
-  int n;
-  if((n=WRITE(clientfd, &message, strlen(message)))==-1)
-  {
-    perror("write");
-    exit(1);
-  }
-  printf("client wrote %d characters\n", n);
-  char buffer[100];
-  memset(buffer, 0, 100);
-  READ(clientfd, &buffer, 99);
-  printf("%s\n", buffer);
-  close(clientfd);
-}
-
 void serverdaemon() {
 
   int sockfd; //file descriptor for the socket
@@ -109,7 +63,6 @@ void serverdaemon() {
     perror("listen");
     exit(1);
   }
-	sleep(5);
   printf("Blocking, waiting for client to connect\n");
 
   struct sockaddr_in client_addr;
@@ -128,7 +81,7 @@ void serverdaemon() {
   char buffer[100];
   memset(buffer,0,100);
   int n;
-  if((n=READ(new_sockfd, buffer, 99))==-1)
+  if((n=read(new_sockfd, buffer, 99))==-1)
   {
     perror("read is failing");
     printf("n=%d\n", n);
@@ -136,23 +89,12 @@ void serverdaemon() {
   printf("The client said: %s\n", buffer);
 
   const char* message="These are the times that try men's souls.";
-  WRITE(new_sockfd, message, strlen(message));
+  write(new_sockfd, message, strlen(message));
   close(sockfd);
   close(new_sockfd);
 }
 
 int main(int argc, char* argv[]) {
-
-	if(argv[1]!=NULL)
-	{
-		// call client daemon
-		string ipaddr=argv[1];
-		clientdaemon(ipaddr);
-	}
-
-	else {
-		// call server daemon
-		serverdaemon();
-	}
+	serverdaemon();
 	return 0;
 }

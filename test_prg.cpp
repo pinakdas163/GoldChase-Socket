@@ -1,5 +1,6 @@
 #include<iostream>
 #include<vector>
+#include <sys/socket.h>
 #include<stdlib.h>
 #include<fstream>
 #include "goldchase.h"
