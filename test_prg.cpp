@@ -23,7 +23,8 @@
 #include "mapboard.h"
 #include <sys/wait.h>
 using namespace std;
-
+string serquename;
+mqd_t msgquefd2[5];
 Map *goldchasecopy;
 sem_t *sem;   // semaphore
 mqd_t playermsgque;
@@ -31,9 +32,10 @@ mapboard *map_pointer;
 int currLoc=0;
 mqd_t playerwrtque;
 int player;
-int clientdpipe[2];
 int clientfd;
 unsigned char *local_map2;
+string msgqname;
+string msgquename[5]={"/PLAYER_QUEUE_1","/PLAYER_QUEUE_2","/PLAYER_QUEUE_3","/PLAYER_QUEUE_4","/PLAYER_QUEUE_5"};
 int input(int item, unsigned char *mp, int row, int col)
 {
   int randnum=0;
@@ -102,32 +104,38 @@ void readMap(vector<string> mapstring) {
   }
 }
 
-void maskPlayer() {
+string maskPlayer() {
+
   sem_wait(sem);
   if(map_pointer->players[0]==0)
   {
     map_pointer->players[0]=getpid();
     player = G_PLR0;
+    msgqname=msgquename[0];
   }
   else if(map_pointer->players[1]==0)
   {
     map_pointer->players[1]=getpid();
     player = G_PLR1;
+    msgqname=msgquename[1];
   }
   else if(map_pointer->players[2]==0)
   {
     map_pointer->players[2]=getpid();
     player = G_PLR2;
+    msgqname=msgquename[2];
   }
   else if(map_pointer->players[3]==0)
   {
     map_pointer->players[3]=getpid();
     player = G_PLR3;
+    msgqname=msgquename[3];
   }
   else if(map_pointer->players[4]==0)
   {
     map_pointer->players[4]=getpid();
     player = G_PLR4;
+    msgqname=msgquename[4];
   }
   else {
     cout<<"No space for more players"<<endl;
@@ -135,6 +143,7 @@ void maskPlayer() {
     exit(1);
   }
   sem_post(sem);
+  return msgqname;
 }
 
 void searchgold(unsigned char* str_map,Map* goldchasecopy, int currLoc, bool &goldfound)
@@ -313,7 +322,7 @@ void exitfunc() {
   //   sem_close(sem);
   //   sem_unlink("/mySem");
   // }
-  std::string qname=mqname(getpid());
+  std::string qname=msgqname; //mqname(getpid());
   const char* cnam=qname.c_str();
   mq_close(playermsgque);
   mq_unlink(cnam);
@@ -367,6 +376,45 @@ std::string playerNo()
   std::stringstream ss;
   ss<<"Player "<<playno;
   return ss.str();
+}
+
+void clientsigusr2handler(int) {
+  unsigned char sendtoserver;
+  //char* playermsg;
+  for(int i=0;i<5;i++)
+  {
+    int err;
+    char msg[250];
+    memset(msg, 0, 250);
+    while((err=mq_receive(msgquefd2[i], msg, 250, NULL))!=-1) {
+      sendtoserver=G_SOCKMSG;
+      if(i==0)
+      {
+        sendtoserver |= G_PLR0;
+      }
+      else if(i==1)
+      {
+        sendtoserver|=G_PLR1;
+      }
+      else if(i==2)
+      {
+        sendtoserver|=G_PLR2;
+      }
+      else if(i==3)
+      {
+        sendtoserver|=G_PLR3;
+      }
+      else if(i==4)
+      {
+        sendtoserver|=G_PLR4;
+      }
+      short msgsize= strlen(msg);
+      //playermsg=msg;
+      WRITE(clientfd,&sendtoserver,sizeof(sendtoserver));
+      WRITE(clientfd,&msgsize,sizeof(msgsize));
+      WRITE(clientfd,&msg,msgsize);
+    }
+  }
 }
 
 void clientsighubhandler(int sig) {
@@ -491,29 +539,7 @@ void create_client_daemon(string ipaddr) {
   sem=sem_open("/mySem", O_CREAT,
                        S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,1);
   sem_wait(sem);
-  // for(int i=0;i<clientrows*clientcols;i++)
-  // {
-  //   if(local_map2[i]==G_WALL)
-  //   {
-  //     WRITE(2,"*",sizeof("*"));
-  //   }
-  //   if(local_map2[i]==G_FOOL)
-  //   {
-  //     WRITE(2,"F",sizeof("F"));
-  //   }
-  //   if(local_map2[i]==G_GOLD)
-  //   {
-  //     WRITE(2,"G",sizeof("G"));
-  //   }
-  //   if(local_map2[i]==G_PLR0)
-  //   {
-  //     WRITE(2,"1",sizeof("1"));
-  //   }
-  //   else
-  //   {
-  //     WRITE(2," ",sizeof(" "));
-  //   }
-  // }
+
   WRITE(2, "client demon creating shared memory\n", sizeof("client demon creating shared memory "));
   int shm_fd2=shm_open("/TAG_mymap",O_CREAT|O_RDWR, S_IRUSR|S_IWUSR);
   ftruncate(shm_fd2, (clientrows*clientcols)+sizeof(mapboard));
@@ -534,6 +560,13 @@ void create_client_daemon(string ipaddr) {
   clientsig_struct.sa_handler=clientsigusr1handler;
   sigaction(SIGUSR1, &clientsig_struct, NULL);
 
+  struct mq_attr attributes;
+  attributes.mq_flags=0;
+  attributes.mq_maxmsg=10;
+  attributes.mq_msgsize=250;
+  clientsig_struct.sa_handler=clientsigusr2handler;
+  sigaction(SIGUSR2, &clientsig_struct, NULL);
+
   READ(clientfd, &clientPlayerSoc, sizeof(clientPlayerSoc));
 
   unsigned char playerbit[5]={G_PLR0, G_PLR1, G_PLR2, G_PLR3, G_PLR4};
@@ -542,6 +575,17 @@ void create_client_daemon(string ipaddr) {
     if((clientPlayerSoc & playerbit[i]) && map_pointer->players[i]==0)
     {
       map_pointer->players[i]=getpid();
+      serquename=msgquename[i];
+      if((msgquefd2[i]=mq_open(serquename.c_str(), O_CREAT|O_RDONLY|O_EXCL|O_NONBLOCK,
+            S_IRUSR|S_IWUSR, &attributes))==-1)
+      {
+        perror("mq_open");
+        exit(1);
+      }
+      struct sigevent mq_notification_event;
+      mq_notification_event.sigev_notify=SIGEV_SIGNAL;
+      mq_notification_event.sigev_signo=SIGUSR2;
+      mq_notify(msgquefd2[i], &mq_notification_event);
     }
   }
   WRITE(2, "client demon completed setup memory\n", sizeof("client demon completed setup memory "));
@@ -552,6 +596,8 @@ void create_client_daemon(string ipaddr) {
   while(true) {
     unsigned char protocol, newmapbyte;
     short noOfchangedmap, offset;
+    short msglength;
+    char msgreceived[250];
     READ(clientfd, &protocol, sizeof(protocol));
 
     if(protocol & G_SOCKPLR)
@@ -560,11 +606,30 @@ void create_client_daemon(string ipaddr) {
       {
         if(protocol & playerbit[i] && map_pointer->players[i]==0)
         {
+          struct mq_attr attributes;
+          attributes.mq_flags=0;
+          attributes.mq_maxmsg=10;
+          attributes.mq_msgsize=250;
+
+          serquename=msgquename[i];
+          if((msgquefd2[i]=mq_open(serquename.c_str(), O_CREAT|O_RDONLY|O_EXCL|O_NONBLOCK,
+                S_IRUSR|S_IWUSR, &attributes))==-1)
+          {
+            perror("mq_open");
+            exit(1);
+          }
+          struct sigevent mq_notification_event;
+          mq_notification_event.sigev_notify=SIGEV_SIGNAL;
+          mq_notification_event.sigev_signo=SIGUSR2;
+          mq_notify(msgquefd2[i], &mq_notification_event);
           map_pointer->players[i]=getpid();
         }
         else if((protocol & playerbit[i])==false && map_pointer->players[i]!=0)
         {
           map_pointer->players[i]=0;
+          serquename=msgquename[i];
+          mq_close(msgquefd2[i]);
+          mq_unlink(serquename.c_str());
         }
       }
       if(protocol==G_SOCKPLR)
@@ -593,6 +658,55 @@ void create_client_daemon(string ipaddr) {
           kill(map_pointer->players[i], SIGUSR1);
         }
       }
+    }
+
+    else if(protocol & G_SOCKMSG)
+    {
+      unsigned char clientplayermsg;
+      if(protocol & G_PLR0)
+      {
+        clientplayermsg=G_PLR0;
+        msgqname=msgquename[0];
+      }
+      else if(protocol & G_PLR1)
+      {
+        clientplayermsg=G_PLR1;
+        msgqname=msgquename[1];
+      }
+      else if(protocol & G_PLR2)
+      {
+        clientplayermsg=G_PLR2;
+        msgqname=msgquename[2];
+      }
+      else if(protocol & G_PLR3)
+      {
+        clientplayermsg=G_PLR3;
+        msgqname=msgquename[3];
+      }
+      else if(protocol & G_PLR4)
+      {
+        clientplayermsg=G_PLR4;
+        msgqname=msgquename[4];
+      }
+      READ(clientfd, &msglength, sizeof(msglength));
+      READ(clientfd, &msgreceived, msglength);
+
+      mqd_t clientplayerwrite;
+      if((clientplayerwrite=mq_open(msgqname.c_str(), O_WRONLY|O_NONBLOCK))==-1)
+      {
+        perror("mq_open error in server daemon");
+        exit(1);
+      }
+      //cerr << "fd=" << writequeue_fd << endl;
+      char message[250];
+      memset(message, 0, 250);
+      strncpy(message, msgreceived, 250);
+      if(mq_send(clientplayerwrite, message, strlen(message), 0)==-1)
+      {
+        perror("mq_send error from daemon");
+        exit(1);
+      }
+      mq_close(clientplayerwrite);
     }
   }
   close(clientfd);
@@ -644,14 +758,14 @@ int main(int argc, char *argv[])
      }
     //  WRITE(2, "shared memory found\n", sizeof("shared memory found "));
    }
-   
+
    sem = sem_open("/mySem", O_RDWR,
                         S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,
                         1);
 // first player
   if(sem==SEM_FAILED)
   {
-    WRITE(2, "first player condition\n", sizeof("first player condition "));
+    //WRITE(2, "first player condition\n", sizeof("first player condition "));
     sem = sem_open("/mySem", O_CREAT,
                          S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,1);
     mapstring=createMap(file, row, col, gold);
@@ -675,7 +789,7 @@ int main(int argc, char *argv[])
   // subsequent players
   else {
     sem_wait(sem);
-    WRITE(2, "client player got the shared memory\n", sizeof("client player got the shared memory "));
+    //WRITE(2, "client player got the shared memory\n", sizeof("client player got the shared memory "));
     int file_desc=shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR);
     int rowp, colp;
     read(file_desc, &rowp, sizeof(int));
@@ -688,7 +802,7 @@ int main(int argc, char *argv[])
     sem_post(sem);
   }
 
-  maskPlayer();
+  std::string qname=maskPlayer();
 
   goldchasecopy=new Map(str_map, row, col);
 
@@ -700,7 +814,8 @@ int main(int argc, char *argv[])
   mq_attr queueval;
   queueval.mq_maxmsg=10;
   queueval.mq_msgsize=250;
-  std::string qname=mqname(getpid());
+  //mqname(getpid());
+  //std::string qname=msgquename
   const char* cnam=qname.c_str();
   playermsgque = mq_open(cnam, O_RDONLY|O_CREAT|O_EXCL|O_NONBLOCK, S_IRUSR|S_IWUSR, &queueval);
   if(playermsgque==-1)
@@ -759,19 +874,24 @@ int main(int argc, char *argv[])
       unsigned int pl= goldchasecopy->getPlayer(playermask);
       std::string nam, msg;
       if(pl==G_PLR0) {
-        nam=mqname(map_pointer->players[0]);
+        //nam=mqname(map_pointer->players[0]);
+         nam=msgquename[0];
       }
       else if(pl==G_PLR1) {
-        nam=mqname(map_pointer->players[1]);
+        //nam=mqname(map_pointer->players[1]);
+        nam=msgquename[1];
       }
       else if(pl==G_PLR2) {
-        nam=mqname(map_pointer->players[2]);
+        //nam=mqname(map_pointer->players[2]);
+        nam=msgquename[2];
       }
       else if(pl==G_PLR3) {
-        nam=mqname(map_pointer->players[3]);
+        //nam=mqname(map_pointer->players[3]);
+        nam=msgquename[3];
       }
       else if(pl==G_PLR4) {
-        nam=mqname(map_pointer->players[4]);
+        //nam=mqname(map_pointer->players[4]);
+        nam=msgquename[4];
       }
 
       msg=playerNo();
@@ -801,7 +921,8 @@ int main(int argc, char *argv[])
       {
         if(map_pointer->players[i]!=0 && map_pointer->players[i]!=id)
         {
-          nam=mqname(map_pointer->players[i]);
+          //nam=mqname(map_pointer->players[i]);
+          nam=msgquename[i];
           mqd_t playerbroadcast;
           if((playerbroadcast=mq_open(nam.c_str(), O_WRONLY))==-1)
           {
@@ -831,7 +952,7 @@ int main(int argc, char *argv[])
         {
           kill(map_pointer->players[i], SIGUSR1);
 
-          string val=mqname(map_pointer->players[i]);
+          string val=msgquename[i];       //mqname(map_pointer->players[i]);
           mqd_t playerbroadcast;
           if((playerbroadcast=mq_open(val.c_str(), O_WRONLY))==-1)
           {
