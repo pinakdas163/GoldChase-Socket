@@ -23,11 +23,16 @@
 #include "mapboard.h"
 using namespace std;
 extern sem_t *sem;
+extern string msgquename[];
+string servmsgqname;
 int sockfd; //file descriptor for the socket
 int status; //for error checking
 int new_sockfd; // file descriptor for each connection
+string cliquename;
+mqd_t msgquefd[5];
 unsigned char *local_map; // local copy of map for server
 mapboard *servmap_pointer;
+//string msgquename[5]={"/PLAYER_QUEUE_1","/PLAYER_QUEUE_2","/PLAYER_QUEUE_3","/PLAYER_QUEUE_4","/PLAYER_QUEUE_5"};
 //close(2);
 //int fd=open("/home/pinakdas163/611myfiles/project4/pinakfifo", O_WRONLY);
 
@@ -91,6 +96,45 @@ void serversighandler(int handler)
     }
   }
 }
+
+void servsigusr2handler(int) {
+  unsigned char sendtoclient;
+  //char* playermsg;
+  for(int i=0;i<5;i++)
+  {
+    int err;
+    char msg[250];
+    memset(msg, 0, 250);
+    while((err=mq_receive(msgquefd[i], msg, 250, NULL))!=-1) {
+      sendtoclient=G_SOCKMSG;
+      if(i==0)
+      {
+        sendtoclient |= G_PLR0;
+      }
+      else if(i==1)
+      {
+        sendtoclient|=G_PLR1;
+      }
+      else if(i==2)
+      {
+        sendtoclient|=G_PLR2;
+      }
+      else if(i==3)
+      {
+        sendtoclient|=G_PLR3;
+      }
+      else if(i==4)
+      {
+        sendtoclient|=G_PLR4;
+      }
+      short msgsize= strlen(msg);
+      //playermsg=msg;
+      WRITE(new_sockfd,&sendtoclient,sizeof(sendtoclient));
+      WRITE(new_sockfd,&msgsize,sizeof(msgsize));
+      WRITE(new_sockfd,&msg,msgsize);
+    }
+  }
+}
 void createServer() {
   //  close(2);
   //  int fd=open("/home/pinakdas163/611myfiles/project4/pinakfifo", O_WRONLY);
@@ -121,31 +165,6 @@ void createServer() {
   local_map = new unsigned char[rowp*colp];
 
   memcpy(local_map, servmap_pointer->map, rowp*colp);
-  for(int i=0;i<rowp*colp;i++)
-  {
-    if(local_map[i]==G_WALL)
-    {
-      write(2,"*",sizeof("*"));
-    }
-    else if(local_map[i]==G_FOOL)
-    {
-      write(2,"F",sizeof("F"));
-    }
-    else if(local_map[i]==G_GOLD)
-    {
-      write(2,"G",sizeof("G"));
-    }
-    else if(local_map[i]==G_PLR0)
-    {
-      write(2,"1",sizeof("1"));
-    }
-    else
-    {
-      write(2," ",sizeof(" "));
-    }
-  }
-  unsigned char servplayers = activePlayers();
-  unsigned char playersock = G_SOCKPLR|servplayers;
 
   struct sigaction serversig_struct; // signal struct
   sigemptyset(&serversig_struct.sa_mask);
@@ -155,7 +174,15 @@ void createServer() {
   //
   sigaction(SIGHUP, &serversig_struct, NULL);
   sigaction(SIGUSR1, &serversig_struct, NULL);
-  //sigaction(SIGUSR2, &sig_struct, NULL);
+
+  struct mq_attr mq_servdaemon;
+  mq_servdaemon.mq_maxmsg=10;
+  mq_servdaemon.mq_msgsize=250;
+  mq_servdaemon.mq_flags=0;
+
+  serversig_struct.sa_handler=servsigusr2handler;
+  sigaction(SIGUSR2, &serversig_struct, NULL);
+
   // ending of setup
   // server connection establishment
 
@@ -209,62 +236,135 @@ void createServer() {
     exit(1);
   }
   // read and write to the socket will be here
-
+  unsigned char servplayers = activePlayers();
+  unsigned char playersock = G_SOCKPLR|servplayers;
   WRITE(new_sockfd, &rowp, sizeof(rowp));
   WRITE(new_sockfd, &colp, sizeof(colp));
+
   for(int i=0;i<rowp*colp;i++)
   {
     WRITE(new_sockfd, &local_map[i], sizeof(local_map[i]));
   }
-  // WRITE(new_sockfd, &playersock, sizeof(playersock));
-  //
-  // while(true) {
-  //   unsigned char protocol, newmapbyte;
-  //   short noOfchangedmap, offset;
-  //   unsigned char playerbit[5]= {G_PLR0, G_PLR1, G_PLR2, G_PLR3, G_PLR4};
-  //   READ(new_sockfd, &protocol, sizeof(protocol));
-  //
-  //   if(protocol & G_SOCKPLR)
-  //   {
-  //     for(int i=0;i<5; i++)
-  //     {
-  //       if(protocol & playerbit[i] && servmap_pointer->players[i]==0)
-  //       {
-  //         servmap_pointer->players[i]=getpid();
-  //       }
-  //       else if((protocol & playerbit[i])==false && servmap_pointer->players[i]!=0)
-  //       {
-  //         servmap_pointer->players[i]=0;
-  //       }
-  //     }
-  //     if(protocol==G_SOCKPLR)
-  //     {
-  //       shm_unlink("/TAG_mymap");
-  //       sem_close(sem);
-  //       sem_unlink("/mySem");
-  //       exit(0);
-  //     }
-  //   }
-  //
-  //   else if(protocol==0) {
-  //
-  //     READ(new_sockfd, &noOfchangedmap, sizeof(noOfchangedmap));
-  //     for(short i=0;i<noOfchangedmap; i++)
-  //     {
-  //       READ(new_sockfd, &offset, sizeof(offset));
-  //       READ(new_sockfd, &newmapbyte, sizeof(newmapbyte));
-  //       servmap_pointer->map[offset]=newmapbyte;
-  //       local_map[offset]=newmapbyte;
-  //     }
-  //     for(int i=0;i<5; i++)
-  //     {
-  //       if(servmap_pointer->players[i]!=0 && servmap_pointer->players[i]!=getpid())
-  //       {
-  //         kill(servmap_pointer->players[i], SIGUSR1);
-  //       }
-  //     }
-  //   }
-  // }
+  WRITE(new_sockfd, &playersock, sizeof(playersock));
+
+  while(true) {
+    unsigned char protocol, newmapbyte;
+    short noOfchangedmap, offset;
+    unsigned char playerbit[5]= {G_PLR0, G_PLR1, G_PLR2, G_PLR3, G_PLR4};
+    short msglength;
+    char msgreceived[250];
+    READ(new_sockfd, &protocol, sizeof(protocol));
+
+    if(protocol & G_SOCKPLR)
+    {
+      for(int i=0;i<5; i++)
+      {
+        if(protocol & playerbit[i] && servmap_pointer->players[i]==0)
+        {
+
+          struct mq_attr mq_clientplayer;
+          mq_clientplayer.mq_flags=0;
+          mq_clientplayer.mq_maxmsg=10;
+          mq_clientplayer.mq_msgsize=250;
+          cliquename=msgquename[i];
+          if((msgquefd[i]=mq_open(cliquename.c_str(), O_CREAT|O_RDONLY|O_EXCL|O_NONBLOCK,
+                S_IRUSR|S_IWUSR, &mq_clientplayer))==-1)
+          {
+            perror("mq_open");
+            exit(1);
+          }
+          struct sigevent mq_notification_event;
+          mq_notification_event.sigev_notify=SIGEV_SIGNAL;
+          mq_notification_event.sigev_signo=SIGUSR2;
+          mq_notify(msgquefd[i], &mq_notification_event);
+          servmap_pointer->players[i]=getpid();
+        }
+        else if((protocol & playerbit[i])==false && servmap_pointer->players[i]!=0)
+        {
+          servmap_pointer->players[i]=0;
+          cliquename=msgquename[i];
+          mq_close(msgquefd[i]);
+          mq_unlink(cliquename.c_str());
+        }
+      }
+      if(protocol==G_SOCKPLR)
+      {
+        shm_unlink("/TAG_mymap");
+        sem_close(sem);
+        sem_unlink("/mySem");
+        exit(0);
+      }
+    }
+
+    else if(protocol==0) {
+
+      READ(new_sockfd, &noOfchangedmap, sizeof(noOfchangedmap));
+      for(short i=0;i<noOfchangedmap; i++)
+      {
+        READ(new_sockfd, &offset, sizeof(offset));
+        READ(new_sockfd, &newmapbyte, sizeof(newmapbyte));
+        servmap_pointer->map[offset]=newmapbyte;
+        local_map[offset]=newmapbyte;
+      }
+      for(int i=0;i<5; i++)
+      {
+        if(servmap_pointer->players[i]!=0 && servmap_pointer->players[i]!=getpid())
+        {
+          kill(servmap_pointer->players[i], SIGUSR1);
+        }
+      }
+    }
+
+    else if(protocol & G_SOCKMSG)
+    {
+      unsigned char serverplayermsg;
+      if(protocol & G_PLR0)
+      {
+        serverplayermsg=G_PLR0;
+        servmsgqname=msgquename[0];
+      }
+      else if(protocol & G_PLR1)
+      {
+        serverplayermsg=G_PLR1;
+        servmsgqname=msgquename[1];
+      }
+      else if(protocol & G_PLR2)
+      {
+        serverplayermsg=G_PLR2;
+        servmsgqname=msgquename[2];
+      }
+      else if(protocol & G_PLR3)
+      {
+        serverplayermsg=G_PLR3;
+        servmsgqname=msgquename[3];
+      }
+      else if(protocol & G_PLR4)
+      {
+        serverplayermsg=G_PLR4;
+        servmsgqname=msgquename[4];
+      }
+      READ(new_sockfd, &msglength, sizeof(msglength));
+      READ(new_sockfd, &msgreceived, msglength);
+
+      mqd_t serverplayerwrite;
+      if((serverplayerwrite=mq_open(servmsgqname.c_str(), O_WRONLY|O_NONBLOCK))==-1)
+      {
+        perror("mq_open error in server daemon");
+        exit(1);
+      }
+      //cerr << "fd=" << writequeue_fd << endl;
+      char message[250];
+      memset(message, 0, 250);
+      strncpy(message, msgreceived, 250);
+      if(mq_send(serverplayerwrite, message, strlen(message), 0)==-1)
+      {
+        perror("mq_send error from daemon");
+        exit(1);
+      }
+      mq_close(serverplayerwrite);
+
+     }
+    }
 
   close(sockfd);
   close(new_sockfd);
@@ -286,12 +386,12 @@ void create_server_daemon()
     close(i);
   open("/dev/null", O_RDWR); //fd 0
   open("/dev/null", O_RDWR); //fd 1
-  //open("/dev/null", O_RDWR); //fd 2
-  int fd=open("/home/pinakdas163/611myfiles/project4/pinakfifo", O_WRONLY);
-  if(fd==-1)
-  {
-    exit(99);
-  }
+  open("/dev/null", O_RDWR); //fd 2
+  // int fd=open("/home/pinakdas163/611myfiles/project4/pinakfifo", O_WRONLY);
+  // if(fd==-1)
+  // {
+  //   exit(99);
+  // }
   umask(0);
   chdir("/");
   //now do whatever you want the daemon to do
