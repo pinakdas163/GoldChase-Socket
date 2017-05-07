@@ -483,7 +483,7 @@ void create_client_daemon(string ipaddr) {
   clientsidemap=new unsigned char[clientrows*clientcols];
   for(int i=0;i<clientrows*clientcols;i++)
   {
-    READ(clientfd,&square, sizeof(char));
+    READ(clientfd, &square, sizeof(char));
     clientsidemap[i]=square;
   }
   memcpy(local_map2, clientsidemap, clientrows*clientcols);
@@ -629,14 +629,10 @@ int main(int argc, char *argv[])
   bool endOfmap=false;
   const string file="mymap2.txt";
   vector<string> mapstring;
-
-  sem = sem_open("/mySem", O_RDWR,
-                       S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,
-                       1);
    if(argv[1]!=NULL) {
      string ipaddr;
      ipaddr=argv[1];
-     if(sem==SEM_FAILED)
+     if(shm_open("/TAG_mymap",O_RDWR, S_IRUSR|S_IWUSR)==-1)
      {
        create_client_daemon(ipaddr);
        wait(NULL);
@@ -648,9 +644,14 @@ int main(int argc, char *argv[])
      }
     //  WRITE(2, "shared memory found\n", sizeof("shared memory found "));
    }
+   
+   sem = sem_open("/mySem", O_RDWR,
+                        S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,
+                        1);
 // first player
   if(sem==SEM_FAILED)
   {
+    WRITE(2, "first player condition\n", sizeof("first player condition "));
     sem = sem_open("/mySem", O_CREAT,
                          S_IRUSR| S_IWUSR| S_IRGRP| S_IWGRP| S_IROTH| S_IWOTH,1);
     mapstring=createMap(file, row, col, gold);
