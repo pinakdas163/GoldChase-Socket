@@ -11,4 +11,4 @@ Map.o: Map.cpp
 	g++ -g -c Map.cpp
 
 clean:
-	rm -f Screen.o Map.o libmap.a test_prg /dev/shm/sem.mySem /dev/shm/TAG_mymap
+	rm -f Screen.o Map.o libmap.a test_prg /dev/shm/sem.mySem /dev/shm/TAG_mymap /dev/mqueue/PLAYER_QUEUE_1 /dev/mqueue/PLAYER_QUEUE_2 /dev/mqueue/PLAYER_QUEUE_3 /dev/mqueue/PLAYER_QUEUE_4 /dev/mqueue/PLAYER_QUEUE_5
