@@ -1,5 +1,6 @@
 #ifndef MAPBOARD_H
 #define MAPBOARD_H
+#include <string>
 //#include "serverdaemon.cpp"
 struct mapboard {
   int rows;//8
@@ -11,5 +12,5 @@ struct mapboard {
 
 //sem_t *sem;   // semaphore
 void create_server_daemon();
-//create_server_daemon();
+void create_client_daemon(std::string ipaddr);
 #endif

@@ -26,18 +26,10 @@ extern sem_t *sem;
 extern string msgquename[];
 string serquename;
 mqd_t msgquefd2[5];
-mqd_t playermsgque;
-mqd_t playerwrtque;
-int sockfd; //file descriptor for the socket
-int status; //for error checking
-int new_sockfd; // file descriptor for each connection
-string cliquename;
-mqd_t msgquefd[5];
-unsigned char *local_map; // local copy of map for server
-mapboard *servmap_pointer;
-//string msgquename[5]={"/PLAYER_QUEUE_1","/PLAYER_QUEUE_2","/PLAYER_QUEUE_3","/PLAYER_QUEUE_4","/PLAYER_QUEUE_5"};
-//close(2);
-//int fd=open("/home/pinakdas163/611myfiles/project4/pinakfifo", O_WRONLY);
+int clientfd;
+unsigned char *local_map2;
+extern mapboard *map_pointer;
+string msgqstrname;
 
 void clientsigusr2handler(int) {
   unsigned char sendtoserver;
@@ -128,7 +120,12 @@ void clientsigusr1handler(int sig)
 
 }
 
-void createServer() {
+void createClient(string ipaddr) {
+  int status;
+  int clientrows, clientcols;
+
+  unsigned char *clientsidemap;
+  unsigned char clientPlayerSoc;
   WRITE(2, "daemon creation finished\n", sizeof("daemon creation finished "));
   const char* portno="62010";
   struct addrinfo hints;
@@ -295,33 +292,33 @@ void createServer() {
       if(protocol & G_PLR0)
       {
         clientplayermsg=G_PLR0;
-        msgqname=msgquename[0];
+        msgqstrname=msgquename[0];
       }
       else if(protocol & G_PLR1)
       {
         clientplayermsg=G_PLR1;
-        msgqname=msgquename[1];
+        msgqstrname=msgquename[1];
       }
       else if(protocol & G_PLR2)
       {
         clientplayermsg=G_PLR2;
-        msgqname=msgquename[2];
+        msgqstrname=msgquename[2];
       }
       else if(protocol & G_PLR3)
       {
         clientplayermsg=G_PLR3;
-        msgqname=msgquename[3];
+        msgqstrname=msgquename[3];
       }
       else if(protocol & G_PLR4)
       {
         clientplayermsg=G_PLR4;
-        msgqname=msgquename[4];
+        msgqstrname=msgquename[4];
       }
       READ(clientfd, &msglength, sizeof(msglength));
       READ(clientfd, &msgreceived, msglength);
 
       mqd_t clientplayerwrite;
-      if((clientplayerwrite=mq_open(msgqname.c_str(), O_WRONLY|O_NONBLOCK))==-1)
+      if((clientplayerwrite=mq_open(msgqstrname.c_str(), O_WRONLY|O_NONBLOCK))==-1)
       {
         perror("mq_open error in server daemon");
         exit(1);
@@ -343,12 +340,7 @@ void createServer() {
 }
 
 void create_client_daemon(string ipaddr) {
-  WRITE(2, "daemon created1\n", sizeof("daemon created1 "));
-  int status;
-  int clientrows, clientcols;
 
-  unsigned char *clientsidemap;
-  unsigned char clientPlayerSoc;
   if(fork()>0) {
     return;
   }
@@ -374,5 +366,5 @@ void create_client_daemon(string ipaddr) {
   umask(0);
   chdir("/");
   //now do whatever you want the daemon to do
-  createClient();
+  createClient(ipaddr);
 }
